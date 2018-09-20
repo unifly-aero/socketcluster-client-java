@@ -66,6 +66,13 @@ hs_err_pid*
 /out/
 .idea/**/*
 
+# eclipse
+/bin/
+.settings
+.classpath
+.factorypath
+.project
+
 # mpeltonen/sbt-idea plugin
 .idea_modules/
 
