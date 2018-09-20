@@ -4,19 +4,15 @@ buildscript {
     }
 }
 
-plugins {
-    id "com.jfrog.bintray" version "1.7"
-}
-
 allprojects {
     tasks.withType(JavaCompile) {
-        sourceCompatibility = '1.7'
-        targetCompatibility = '1.7'
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
     }
 }
 
-group 'io.github.sac'
-version '1.7.5'
+group 'aero.unifly'
+version '1.7.6-SNAPSHOT'
 
 
 allprojects {
@@ -40,46 +36,27 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 
 publishing {
     publications {
-        MyPublication(MavenPublication) {
+        mavenJava(MavenPublication) {
+            groupId 'aero.unifly'
+            artifactId 'unifly-socketcluster-client-java'
             from components.java
-            groupId 'io.github.sac'
-            artifactId 'SocketclusterClientJava'
-            version '1.7.5'
-
             artifact sourceJar {
                 classifier "sources"
             }
-
-            artifact javadocJar {
-                classifier "javadoc"
-            }
         }
     }
-}
-
-
-bintray{
-    user=System.getenv('BINTRAY_USER')
-    key=System.getenv('BINTRAY_API_KEY')
-//    configurations = ['archives']
-    publications = ['MyPublication']
-    pkg {
-        repo = 'Maven'
-        name = 'socketcluster-client'
-        licenses = ['Apache-2.0']
-        vcsUrl = 'https://github.com/sacOO7/socketcluster-client-java.git'
-        publicDownloadNumbers = true
-
-        version {
-            name = '1.7.5'
-            desc = 'Added proper internal logging, fixed disconnect null exception, added method to get internal logger'
-            vcsTag = '1.7.5'
+    repositories {
+        maven {
+            url "${artifactoryURL}" + "/artifactory/libs-snapshot-local"
+            credentials {
+                username = "${artifactoryUser}"
+                password = "${artifactoryPassword}"
+            }
         }
-
     }
 }
 
 dependencies {
-    compile 'com.neovisionaries:nv-websocket-client:1.30'
+    compile 'com.neovisionaries:nv-websocket-client:2.5'
     compile group: 'org.json', name: 'json', version: '20090211'
 }
