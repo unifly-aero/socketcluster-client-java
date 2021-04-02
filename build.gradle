@@ -4,16 +4,18 @@ buildscript {
     }
 }
 
+plugins {
+    id 'net.researchgate.release' version '2.8.1'
+}
+
 allprojects {
     tasks.withType(JavaCompile) {
-        sourceCompatibility = '1.8'
-        targetCompatibility = '1.8'
+        sourceCompatibility = '11'
+        targetCompatibility = '11'
     }
 }
 
 group 'aero.unifly'
-version '1.7.6-SNAPSHOT'
-
 
 allprojects {
     repositories {
@@ -33,6 +35,9 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
     from javadoc.destinationDir
 }
+release {
+    tagTemplate = 'v${version}'
+}
 
 publishing {
     publications {
@@ -43,15 +48,17 @@ publishing {
             artifact sourceJar {
                 classifier "sources"
             }
+            withoutBuildIdentifier()
+            suppressAllPomMetadataWarnings()
         }
     }
     repositories {
         maven {
-            url "${artifactoryURL}" + "/artifactory/libs-snapshot-local"
-            credentials {
-                username = "${artifactoryUser}"
-                password = "${artifactoryPassword}"
-            }
+            name = 'unifly'
+            def releasesRepoUrl = artifactoryURL + "/artifactory/libs-release-local"
+            def snapshotsRepoUrl = artifactoryURL + "/artifactory/libs-snapshot-local"
+            url = rootProject.version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+            credentials(PasswordCredentials)
         }
     }
 }
