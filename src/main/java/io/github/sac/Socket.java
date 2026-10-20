@@ -29,6 +29,12 @@ public class Socket extends Emitter {
 
     private final Logger logger = Logger.getLogger(Socket.class.getName());
 
+    /**
+     * Max milliseconds to wait for the server while doing the opening handshake.
+     * Without it a server that accepts the TCP connection but never answers blocks connect() forever.
+     */
+    public static final int DEFAULT_HANDSHAKE_TIMEOUT = 10000;
+
     private AtomicInteger counter;
     private String URL;
     private WebSocketFactory factory;
@@ -43,7 +49,7 @@ public class Socket extends Emitter {
 
     public Socket(String URL) {
         this.URL = URL;
-        factory = new WebSocketFactory().setConnectionTimeout(5000);
+        factory = new WebSocketFactory().setConnectionTimeout(5000).setSocketTimeout(DEFAULT_HANDSHAKE_TIMEOUT);
         counter = new AtomicInteger(1);
         acks = new HashMap<>();
         channels = new ArrayList<>();
@@ -100,12 +106,30 @@ public class Socket extends Emitter {
         return factory;
     }
 
+    /**
+     * Max milliseconds to wait for the server during the opening handshake, 0 waits forever.
+     * Once connected the timeout is cleared, so idle connections are not dropped.
+     */
+    public void setHandshakeTimeout(int timeout) {
+        factory.setSocketTimeout(timeout);
+    }
+
     public void setAuthToken(String token) {
         AuthToken = token;
     }
 
     public WebSocketAdapter getAdapter() {
         return new WebSocketAdapter() {
+
+            @Override
+            public void onStateChanged(WebSocket websocket, WebSocketState newState) throws Exception {
+                // OPEN is signalled before the reading thread starts: clear the handshake timeout,
+                // otherwise every read on an idle connection would time out and drop it.
+                if (newState == WebSocketState.OPEN && websocket.getSocket() != null) {
+                    websocket.getSocket().setSoTimeout(0);
+                }
+                super.onStateChanged(websocket, newState);
+            }
 
             @Override
             public void onConnected(WebSocket websocket, Map<String, List<String>> headers) throws Exception {
@@ -434,19 +458,26 @@ public class Socket extends Emitter {
         return headers;
     }
 
+    private WebSocket createWebSocket() throws IOException {
+        WebSocket webSocket = factory.createSocket(URL);
+        webSocket.addExtension("permessage-deflate; client_max_window_bits");
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            webSocket.addHeader(entry.getKey(), entry.getValue());
+        }
+        webSocket.addListener(adapter);
+        return webSocket;
+    }
+
     public void connect() {
 
         try {
-            ws = factory.createSocket(URL);
+            ws = createWebSocket();
         } catch (IOException e) {
+            // Don't fall through to connect() on the previous, already used, websocket
             logger.severe(e.toString());
+            reconnect();
+            return;
         }
-        ws.addExtension("permessage-deflate; client_max_window_bits");
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            ws.addHeader(entry.getKey(), entry.getValue());
-        }
-
-        ws.addListener(adapter);
 
         try {
             ws.connect();
@@ -487,22 +518,22 @@ public class Socket extends Emitter {
         } catch (WebSocketException e) {
             listener.onConnectError(Socket.this, e);
             reconnect();
+        } catch (RuntimeException e) {
+            // Anything else must not end the reconnect chain either
+            logger.log(Level.SEVERE, "Unexpected error while connecting", e);
+            reconnect();
         }
 
     }
 
     public void connectAsync() {
         try {
-            ws = factory.createSocket(URL);
+            ws = createWebSocket();
         } catch (IOException e) {
             logger.severe(e.toString());
+            reconnect();
+            return;
         }
-        ws.addExtension("permessage-deflate; client_max_window_bits");
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            ws.addHeader(entry.getKey(), entry.getValue());
-        }
-
-        ws.addListener(adapter);
         ws.connectAsynchronously();
     }
 
@@ -518,18 +549,25 @@ public class Socket extends Emitter {
             return;
         }
 
-        final Timer timer = new Timer();
+        final Timer timer = new Timer("socketcluster-reconnect", true);
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                if (strategy == null) {
-                    logger.warning("Unable to reconnect: reconnection is null");
-                    return;
+                try {
+                    if (strategy == null) {
+                        logger.warning("Unable to reconnect: reconnection is null");
+                        return;
+                    }
+                    strategy.processValues();
+                    Socket.this.connect();
+                } catch (RuntimeException e) {
+                    // An exception escaping here kills the timer thread and with it all further reconnects
+                    logger.log(Level.SEVERE, "Unexpected error while reconnecting", e);
+                    reconnect();
+                } finally {
+                    timer.cancel();
+                    timer.purge();
                 }
-                strategy.processValues();
-                Socket.this.connect();
-                timer.cancel();
-                timer.purge();
             }
         }, strategy.getReconnectInterval());
     }

@@ -1,6 +1,6 @@
 buildscript {
     repositories {
-        jcenter()
+        mavenCentral()
     }
 }
 
@@ -19,7 +19,7 @@ group 'aero.unifly'
 
 allprojects {
     repositories {
-        jcenter()
+        mavenCentral()
     }
     apply plugin: 'java'
     apply plugin: 'maven'
@@ -54,9 +54,9 @@ publishing {
     }
     repositories {
         maven {
-            name = 'unifly'
-            def releasesRepoUrl = artifactoryURL + "/artifactory/libs-release-local"
-            def snapshotsRepoUrl = artifactoryURL + "/artifactory/libs-snapshot-local"
+            name = 'uniflyNexus'
+            def releasesRepoUrl = nexusURL + "/repository/maven-release-local"
+            def snapshotsRepoUrl = nexusURL + "/repository/maven-snapshot-local"
             url = rootProject.version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
             credentials(PasswordCredentials)
         }
@@ -64,6 +64,6 @@ publishing {
 }
 
 dependencies {
-    compile 'com.neovisionaries:nv-websocket-client:2.5'
+    compile 'com.neovisionaries:nv-websocket-client:2.14'
     compile group: 'org.json', name: 'json', version: '20090211'
 }
